@@ -112,7 +112,129 @@
             <button id="send-button" onclick="sendMessage()">전송</button>
         </div>
     </div>
-아양봇이 초기화되었습니다.");
+    <script>
+        const chatDisplay = document.getElementById("chat-display");
+        const userInput = document.getElementById("user-input");
+        const sendButton = document.getElementById("send-button");
+        const headerButtons = document.querySelectorAll("#header-buttons button");
+
+        let chatHistory = JSON.parse(localStorage.getItem("chatHistory")) || [];
+        let responses = JSON.parse(localStorage.getItem("responses")) || {
+            "안녕": "안녕하세요! 기분이 어떠세요?",
+            "슬퍼": "무슨 일이 있으신가요? 제가 들어드릴게요.",
+            "행복해": "정말 기쁘네요! 행복은 삶의 원동력이죠.",
+            "배고파": "배고프시면 맛있는 걸 드셔보세요! 추천 메뉴는 피자입니다.",
+            "영화 추천해줘": "인셉션을 추천합니다! 흥미로운 줄거리예요.",
+        };
+        let lastUnknownMessage = "";
+        let isBotTyping = false;
+        let typingInterval;
+
+        chatHistory.forEach(({ sender, text }) => appendMessage(text, sender));
+        checkAndInitialize();
+
+        function saveChatHistory() {
+            localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+            localStorage.setItem("responses", JSON.stringify(responses));
+        }
+
+        function enableUserInput(enable) {
+            userInput.disabled = !enable;
+            sendButton.disabled = !enable;
+            headerButtons.forEach(button => (button.disabled = !enable));
+        }
+
+        function appendMessage(content, sender) {
+            const message = document.createElement("div");
+            message.className = `message ${sender}`;
+            message.textContent = content;
+            chatDisplay.appendChild(message);
+            chatHistory.push({ sender, text: content });
+            chatDisplay.scrollTop = chatDisplay.scrollHeight;
+            saveChatHistory();
+        }
+
+        function appendTypingMessage(content) {
+            isBotTyping = true;
+            enableUserInput(false);
+            const message = document.createElement("div");
+            message.className = "message bot";
+            chatDisplay.appendChild(message);
+
+            let i = 0;
+            typingInterval = setInterval(() => {
+                if (i < content.length) {
+                    message.textContent += content[i++];
+                } else {
+                    clearInterval(typingInterval);
+                    isBotTyping = false;
+                    enableUserInput(true);
+                }
+                chatDisplay.scrollTop = chatDisplay.scrollHeight;
+            }, 50);
+        }
+
+        function sendMessage() {
+            if (isBotTyping) return; // 타이핑 중에는 입력 불가
+
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            appendMessage(message, "user");
+            userInput.value = "";
+
+            if (message === "%") {
+                clearChatHistory();
+            } else if (message === "@") {
+                resetCustomResponses();
+            } else if (message === "^") {
+                resetBot();
+            } else if (message === "$") {
+                listCustomResponses();
+            } else if (message.startsWith("검색:")) {
+                webSearch(message.slice(3).trim());
+            } else if (message.startsWith("유튜브:")) {
+                youtubeSearch(message.slice(4).trim());
+            } else if (message.startsWith("#")) {
+                addResponse(message);
+            } else {
+                const response = getResponse(message);
+                appendTypingMessage(response);
+            }
+        }
+
+        function clearChatHistory() {
+            chatHistory = [];
+            localStorage.removeItem("chatHistory");
+            chatDisplay.innerHTML = "";
+            appendTypingMessage("대화 기록이 삭제되었습니다!");
+        }
+
+        function resetCustomResponses() {
+            const defaultResponses = {
+                "안녕": "안녕하세요! 기분이 어떠세요?",
+                "슬퍼": "무슨 일이 있으신가요? 제가 들어드릴게요.",
+                "행복해": "정말 기쁘네요! 행복은 삶의 원동력이죠.",
+                "배고파": "배고프시면 맛있는 걸 드셔보세요! 추천 메뉴는 피자입니다.",
+                "영화 추천해줘": "인셉션을 추천합니다! 흥미로운 줄거리예요.",
+            };
+            responses = { ...defaultResponses };
+            localStorage.setItem("responses", JSON.stringify(responses));
+            appendTypingMessage("추가된 질문과 답변이 삭제되었습니다!");
+        }
+
+        function resetBot() {
+            chatHistory = [];
+            responses = {
+                "안녕": "안녕하세요! 기분이 어떠세요?",
+                "슬퍼": "무슨 일이 있으신가요? 제가 들어드릴게요.",
+                "행복해": "정말 기쁘네요! 행복은 삶의 원동력이죠.",
+                "배고파": "배고프시면 맛있는 걸 드셔보세요! 추천 메뉴는 피자입니다.",
+                "영화 추천해줘": "인셉션을 추천합니다! 흥미로운 줄거리예요.",
+            };
+            localStorage.clear();
+            chatDisplay.innerHTML = "";
+            appendTypingMessage("아양봇이 초기화되었습니다.");
         }
 
         function listCustomResponses() {
@@ -138,15 +260,39 @@
                 lastUnknownMessage = "";
                 appendTypingMessage("새로운 답변이 추가되었습니다!");
                 saveChatHistory();
-         봇입니다!");
+            } else {
+                appendTypingMessage("추가할 질문이 없습니다. 새로운 질문을 먼저 입력해주세요.");
+            }
+        }
+
+        function getResponse(message) {
+            if (responses[message]) return responses[message];
+            lastUnknownMessage = message;
+            return "이 말을 어떻게 대답하는지 모르겠어요. #을 맨 앞에 두고 말해주세요.";
+        }
+
+        function webSearch(query) {
+            const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+            window.open(searchUrl, "_blank");
+            appendTypingMessage(`'${query}'에 대한 검색 결과를 확인하세요.`);
+        }
+
+        function youtubeSearch(query) {
+            const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+            window.open(searchUrl, "_blank");
+            appendTypingMessage(`유튜브에서 '${query}'를 검색합니다.`);
+        }
+
+        function showProfile() {
+            appendTypingMessage("이름: Ayang Bot Pro Beta 1.0\n소개: 대화를 통해 내장되어 있는 답변을 드려 도움을 드리는 봇입니다!");
         }
 
         function showInstructions() {
-            appendTypingMessage("사용방법: 질문하면 대답합니다. 모르는 질문은 #으로 새 답변을 추가하세요.그리고,@를 이용하여 아양봇에 추가된 질문,답변을 삭제할 수 있습니다.$를 이용해 아양봇에 추가 되어 있는 질문,답변을 확인하세요.%로 아양봇과의 대화 내용을 삭제할 수 있습니다.^로는 아양봇을 초기화할 수 있습니다 ");
+            appendTypingMessage("사용방법: 질문하면 대답합니다. 모르는 질문은 #으로 새 답변을 추가하세요.그리고,@를 이용하여 아양봇에 추가된 질문,답변을 삭제할 수 있습니다.$를 이용해 아양봇에 추가 되어 있는 질문,답변을 확인하세요.%로 아양봇과의 대화 내용을 삭제할 수 있습니다.^로는 아양봇을 초기화할 수 있습니다");
         }
 
         function showHistory() {
-            appendTypingMessage("아양봇 전적: 2025.1.5에 탄생한 내장 되어있는 말을 하는 대화형 봇입니다.");
+            appendTypingMessage("아양봇 전적: 2025.01.05에 탄생한 대화형 봇입니다.");
         }
 
         function changeTheme(theme) {
